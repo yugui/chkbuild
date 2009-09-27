@@ -22,7 +22,7 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
 # OF SUCH DAMAGE.
 
-require 'chkbuild/cvs'
+require 'chkbuild/scm/cvs'
 
 class ChkBuild::Build
   def gnu_savannah_cvs(proj, mod, branch, opts={})

@@ -24,17 +24,22 @@
 
 Encoding.default_external = "ASCII-8BIT" if defined?(Encoding.default_external = nil)
 
+Dir.glob( File.join(File.expand_path("../../core_ext", __FILE__), '*.rb') ) do |path|
+  require path
+end
+$: << File.expand_path("../misc", __FILE__)
+
 require 'chkbuild/main'
 require 'chkbuild/lock'
-require 'chkbuild/cvs'
-require 'chkbuild/svn'
-require 'chkbuild/git'
-require 'chkbuild/xforge'
+require 'chkbuild/scm/cvs'
+require 'chkbuild/scm/svn'
+require 'chkbuild/scm/git'
+require 'chkbuild/scm/xforge'
 require "util"
 require 'chkbuild/target'
 require 'chkbuild/build'
 
 module ChkBuild
-  autoload :Ruby, 'chkbuild/ruby'
-  autoload :GCC, 'chkbuild/gcc'
+  autoload :Ruby, 'chkbuild/targets/ruby'
+  autoload :GCC, 'chkbuild/targets/gcc'
 end

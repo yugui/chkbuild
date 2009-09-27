@@ -24,16 +24,6 @@
 
 require 'util'
 
-class String
-  def lastline
-    if pos = rindex(?\n)
-      self[(pos+1)..-1]
-    else
-      self
-    end
-  end
-end
-
 class ChkBuild::Title
   def initialize(target, logfile)
     @target = target
