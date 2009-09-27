@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{chkbuild}
-  s.version = "0.0.0"
+  s.version = "0.1.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["TANAKA, Akira", "Yuki Sonoda (Yugui)"]
@@ -13,29 +13,34 @@ Gem::Specification.new do |s|
   s.email = %q{yugui@yugui.jp}
   s.executables = ["last-build", "start-build"]
   s.extra_rdoc_files = [
-    "README.ja.rd"
+    "README.ja.rd",
+     "README.rd"
   ]
   s.files = [
-    "README.ja.rd",
+    ".gitignore",
+     "README.ja.rd",
      "Rakefile",
      "VERSION",
      "bin/last-build",
      "bin/start-build",
+     "chkbuild.gemspec",
+     "core_ext/io.rb",
+     "core_ext/string.rb",
      "lib/chkbuild.rb",
      "lib/chkbuild/build.rb",
-     "lib/chkbuild/cvs.rb",
-     "lib/chkbuild/gcc.rb",
-     "lib/chkbuild/git.rb",
      "lib/chkbuild/lock.rb",
      "lib/chkbuild/logfile.rb",
      "lib/chkbuild/main.rb",
      "lib/chkbuild/options.rb",
-     "lib/chkbuild/ruby.rb",
-     "lib/chkbuild/svn.rb",
+     "lib/chkbuild/scm/cvs.rb",
+     "lib/chkbuild/scm/git.rb",
+     "lib/chkbuild/scm/svn.rb",
+     "lib/chkbuild/scm/xforge.rb",
      "lib/chkbuild/target.rb",
+     "lib/chkbuild/targets/gcc.rb",
+     "lib/chkbuild/targets/ruby.rb",
      "lib/chkbuild/title.rb",
      "lib/chkbuild/upload.rb",
-     "lib/chkbuild/xforge.rb",
      "lib/misc/escape.rb",
      "lib/misc/gdb.rb",
      "lib/misc/timeoutcom.rb",
