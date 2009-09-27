@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{chkbuild}
-  s.version = "0.1.1"
+  s.version = "0.1.2"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["TANAKA, Akira", "Yuki Sonoda (Yugui)"]
@@ -13,8 +13,7 @@ Gem::Specification.new do |s|
   s.email = %q{yugui@yugui.jp}
   s.executables = ["last-build", "start-build"]
   s.extra_rdoc_files = [
-    "README.ja.rd",
-     "README.rd"
+    "README.ja.rd"
   ]
   s.files = [
     "README.ja.rd",
