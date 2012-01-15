@@ -1,4 +1,6 @@
-# Copyright (C) 2006,2007,2008,2009 Tanaka Akira  <akr@fsij.org>
+# chkbuild/target.rb - target class definition
+#
+# Copyright (C) 2006-2011 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -25,156 +27,94 @@
 class ChkBuild::Target
   def initialize(target_name, *args, &block)
     @target_name = target_name
-    @build_proc = block
-    @opts = ChkBuild.get_options
-    @opts.update args.pop if Hash === args.last
+    ChkBuild.define_build_proc(target_name, &block) if block
     init_target(*args)
-    @title_hook = []
-    init_default_title_hooks
-    @failure_hook = []
-    @diff_preprocess_hook = []
-    init_default_diff_preprocess_hooks
-    @diff_preprocess_sort_patterns = []
   end
-  attr_reader :target_name, :opts, :build_proc
+  attr_reader :target_name
+
+  def inspect
+    "\#<#{self.class}: #{@target_name}>"
+  end
 
   def init_target(*args)
-    @dep_targets = []
-    suffixes_ary = []
-    args.each {|arg|
-      if ChkBuild::Target === arg
-        @dep_targets << arg
+    args = args.map {|a|
+      if Array === a
+        a.map {|v| String === v ? {:suffix_? => v} : v }
+      elsif String === a
+        [{:suffix_? => a}]
       else
-        suffixes_ary << arg
+        [a]
       end
     }
     @branches = []
-    Util.rproduct(*suffixes_ary) {|suffixes|
-      if @opts[:limit_combination]
-        next if !@opts[:limit_combination].call(*suffixes)
+    Util.rproduct(*args) {|a|
+      opts_list = []
+      a.flatten.each {|v|
+        case v
+	when nil
+	when ChkBuild::Target
+	  opts_list << { :depend_? => v }
+	when Hash
+	  opts_list << v
+        else
+	  raise "unexpected option: #{v.inspect}"
+	end
+      }
+      opts_list << ChkBuild.get_options
+      opts = Util.merge_opts(opts_list)
+      if opts[:complete_options]
+        opts = opts[:complete_options].call(opts)
+	next if !opts
       end
-      suffixes.compact!
-      @branches << suffixes
+      @branches << opts
     }
   end
 
-  def init_default_title_hooks
-    add_title_hook('success') {|title, log|
-      title.update_title(:status) {|val| 'success' if !val }
-    }
-    add_title_hook('failure') {|title, log|
-      title.update_title(:status) {|val|
-        if !val
-          line = /\n/ =~ log ? $` : log
-          line = line.strip
-          line if !line.empty?
-        end
+  def each_branch_opts
+    @branches.each {|opts| yield opts }
+  end
+
+  def each_target(memo={}, &block)
+    return if memo.include? @target_name
+    @branches.each {|opts|
+      dep_targets = Util.opts2aryparam(opts, :depend)
+      dep_targets.each {|dep_target|
+	dep_target.each_target(memo, &block)
       }
     }
-    add_title_hook(nil) {|title, log|
-      num_warns = log.scan(/warn/i).length
-      title.update_title(:warn) {|val| "#{num_warns}W" } if 0 < num_warns
-    }
-    add_title_hook('dependencies') {|title, log|
-      dep_versions = []
-      title.logfile.dependencies.each {|suffixed_name, time, ver|
-        dep_versions << "(#{ver})"
+    memo[@target_name] = true
+    yield self
+    nil
+  end
+
+  def make_build_set
+    build_hash = {}
+    build_set = []
+    each_target {|t|
+      builds = []
+      t.each_branch_opts {|opts|
+	dep_targets = Util.opts2aryparam(opts, :depend)
+	dep_builds = dep_targets.map {|dep_target| build_hash.fetch(dep_target.target_name) }
+	Util.rproduct(*dep_builds) {|dependencies|
+	  all_depbuilds = {}
+	  found_inconsistency = false
+	  dependencies.each {|db|
+	    db.traverse_depbuild {|db2|
+	      db3 = all_depbuilds[db2.target.target_name]
+	      if db3 && db3 != db2
+		found_inconsistency = true
+	      end
+	      all_depbuilds[db2.target.target_name] = db2
+	    }
+	  }
+	  next if found_inconsistency
+	  dependencies = all_depbuilds.map {|target_name, depbuild| depbuild }.sort_by {|db| db.target.target_name }
+	  builds << ChkBuild::Build.new(t, opts, dependencies)
+	}
       }
-      title.update_title(:dep_versions, dep_versions)
+      build_hash[t.target_name] = builds
+      build_set << [t, builds]
     }
-  end
-
-  def add_title_hook(secname, &block) @title_hook << [secname, block] end
-  def each_title_hook(&block) @title_hook.each(&block) end
-
-  def add_failure_hook(secname, &block) @failure_hook << [secname, block] end
-  def each_failure_hook(&block) @failure_hook.each(&block) end
-
-  CHANGE_LINE_PAT = /^(ADD|DEL|CHG) .*\t.*->.*\n|^COMMIT .*\n|^last commit:\n/
-
-  def init_default_diff_preprocess_hooks
-    add_diff_preprocess_gsub(/ # \d{4,}-\d\d-\d\dT\d\d:\d\d:\d\d[-+]\d\d:\d\d$/) {|match|
-      ' # <time>'
-    }
-    add_diff_preprocess_gsub(CHANGE_LINE_PAT) {|match| '' }
-    add_diff_preprocess_gsub(/timeout: the process group \d+ is alive/) {|match|
-      "timeout: the process group <pgid> is alive"
-    }
-    add_diff_preprocess_gsub(/some descendant process in process group \d+ remain/) {|match|
-      "some descendant process in process group <pgid> remain"
-    }
-  end
-
-  def add_diff_preprocess_gsub(pat, &block)
-    @diff_preprocess_hook << lambda {|line| line.gsub(pat) { yield $~ } }
-  end
-  def add_diff_preprocess_hook(&block) @diff_preprocess_hook << block end
-  def each_diff_preprocess_hook(&block) @diff_preprocess_hook.each(&block) end
-
-  def add_diff_preprocess_sort(pat) @diff_preprocess_sort_patterns << pat end
-  def diff_preprocess_sort_pattern()
-    if @diff_preprocess_sort_patterns.empty?
-      nil
-    else
-      /\A#{Regexp.union(*@diff_preprocess_sort_patterns)}/
-    end
-  end
-
-  def each_suffixes
-    @branches.each {|suffixes|
-      yield suffixes
-    }
-  end
-
-  def update_option(hash)
-    @opts.update(hash)
-  end
-
-  def make_build_objs
-    return @builds if defined? @builds
-    builds = []
-    each_suffixes {|suffixes|
-      dep_builds = @dep_targets.map {|dep_target| dep_target.make_build_objs }
-      Util.rproduct(*dep_builds) {|dependencies|
-        builds << ChkBuild::Build.new(self, suffixes, dependencies)
-      }
-    }
-    @builds = builds
-  end
-  def each_build_obj(&block)
-    make_build_objs.each(&block)
-  end
-
-  def make_result
-    return @result if defined? @result
-    succeed = Result.new
-    each_build_obj {|build|
-      if build.depbuilds.all? {|depbuild| depbuild.success? }
-        succeed.add(build) if build.build
-      end
-    }
-    @result = succeed
-    succeed
-  end
-
-  def result
-    return @result if defined? @result
-    raise "#{@target_name}: no result yet"
-  end
-
-  class Result
-    include Enumerable
-
-    def initialize
-      @list = []
-    end
-
-    def add(elt)
-      @list << elt
-    end
-
-    def each
-      @list.each {|elt| yield elt }
-    end
+    build_set
   end
 end

@@ -2,7 +2,9 @@
 
 require 'chkbuild'
 
-ChkBuild.def_target("network-error") {|b|
+ChkBuild.limit(:data=>1024*1024*2000, :as=>1024*1024*2000)
+
+ChkBuild.def_target("random-neterror") {|b|
   b.network_access {
     if rand < 0.5
       b.run("false")
@@ -10,7 +12,7 @@ ChkBuild.def_target("network-error") {|b|
       b.run("true")
     end
   }
-  b.run("true")
+  b.run("date")
 }
 
 ChkBuild.main

@@ -1,6 +1,6 @@
-# chkbuild/lock.rb - lock implementation
+# erbio.rb - erb output IO directly
 #
-# Copyright (C) 2006,2009,2010 Tanaka Akira  <akr@fsij.org>
+# Copyright (C) 2010 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -24,43 +24,21 @@
 # IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
 # OF SUCH DAMAGE.
 
-module ChkBuild
-  LOCK_PATH = ChkBuild.build_top + '.lock'
+require 'erb'
 
-  def self.lock_start
-    if !defined?(@lock_io)
-      @lock_io = LOCK_PATH.open(File::WRONLY|File::CREAT|File::APPEND)
-    end
-    if @lock_io.flock(File::LOCK_EX|File::LOCK_NB) == false
-      raise "another chkbuild is running."
-    end
-    if 102400 < @lock_io.stat.size
-      @lock_io.truncate(0)
-    end
-    @lock_io.sync = true
-    @lock_io.close_on_exec = true
-    @lock_io.puts "\n#{Time.now.iso8601} locked pid:#{$$}"
-    lock_pid = $$
-    t1 = Time.now
-    at_exit {
-      t2 = Time.now
-      @lock_io.print "#{Time.now.iso8601} exit pid:#{$$}\t#{Util.format_elapsed_time t2-t1}\n" if $$ == lock_pid
-    }
-  end
+class ERBIO < ERB
+  def set_eoutvar(compiler, eoutvar = '_erbout')
+    compiler.put_cmd = "#{eoutvar}.write"
+    compiler.insert_cmd = "#{eoutvar}.write"
 
-  def self.lock_puts(mesg)
-    LOCK_PATH.open(File::WRONLY|File::APPEND) {|f|
-      f.sync = true
-      if block_given?
-        t1 = Time.now
-        f.print "#{t1.iso8601} #{mesg}"
-        ret = yield
-        t2 = Time.now
-        f.puts "\t#{Util.format_elapsed_time t2-t1}"
-        ret
-      else
-        f.puts "#{Time.now.iso8601} #{mesg}"
-      end
-    }
+    cmd = []
+    cmd.push ""
+
+    compiler.pre_cmd = cmd
+
+    cmd = []
+    cmd.push(eoutvar)
+
+    compiler.post_cmd = cmd
   end
 end

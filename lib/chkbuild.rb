@@ -1,4 +1,6 @@
-# Copyright (C) 2006,2008,2009 Tanaka Akira  <akr@fsij.org>
+# chkbuild.rb - chkbuild library entry file
+#
+# Copyright (C) 2006-2010 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -30,12 +32,14 @@ end
 $: << File.expand_path("../misc", __FILE__)
 
 require 'chkbuild/main'
+require 'chkbuild/config'
 require 'chkbuild/lock'
 require 'chkbuild/scm/cvs'
 require 'chkbuild/scm/svn'
 require 'chkbuild/scm/git'
 require 'chkbuild/scm/xforge'
 require "util"
+require 'chkbuild/hook'
 require 'chkbuild/target'
 require 'chkbuild/build'
 

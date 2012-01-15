@@ -1,6 +1,6 @@
 # escape.rb - escape/unescape library for several formats
 #
-# Copyright (C) 2006,2007 Tanaka Akira  <akr@fsij.org>
+# Copyright (C) 2006,2007,2009 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -149,7 +149,11 @@ module Escape
       assoc = []
       @str.split(/[&;]/, -1).each {|s|
         raise InvalidHTMLForm, "invalid: #{@str}" unless /=/ =~ s
-        assoc << [PercentEncoded.new_no_dup($`), PercentEncoded.new_no_dup($')]
+        k = $`
+        v = $'
+        k.gsub!(/\+/, ' ')
+        v.gsub!(/\+/, ' ')
+        assoc << [PercentEncoded.new_no_dup(k), PercentEncoded.new_no_dup(v)]
       }
       assoc
     end
@@ -166,7 +170,7 @@ module Escape
   #  Escape.percent_encoding(' !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~')
   #  #=> #<Escape::PercentEncoded: %20%21%22%23%24%25%26%27%28%29%2A%2B%2C-.%2F%3A%3B%3C%3D%3E%3F%40%5B%5C%5D%5E_%60%7B%7C%7D~>
   def percent_encoding(str)
-    s = str.gsub(%r{[^a-zA-Za-z0-9\-._~]}n) {
+    s = str.gsub(%r{[^A-Za-z0-9\-._~]}n) {
       '%' + $&.unpack("H2")[0].upcase
     }
     PercentEncoded.new_no_dup(s)
@@ -282,7 +286,9 @@ module Escape
       first = false
       k.each_byte {|byte|
         ch = byte.chr
-        if %r{[^0-9A-Za-z\-\._~:/?@!\$'()*,]}n =~ ch
+        if ch == ' '
+          r << "+"
+        elsif %r{[^0-9A-Za-z\-\._~:/?@!\$'()*,]}n =~ ch
           r << "%" << ch.unpack("H2")[0].upcase
         else
           r << ch
@@ -291,7 +297,9 @@ module Escape
       r << '='
       v.each_byte {|byte|
         ch = byte.chr
-        if %r{[^0-9A-Za-z\-\._~:/?@!\$'()*,]}n =~ ch
+        if ch == ' '
+          r << "+"
+        elsif %r{[^0-9A-Za-z\-\._~:/?@!\$'()*,]}n =~ ch
           r << "%" << ch.unpack("H2")[0].upcase
         else
           r << ch

@@ -1,4 +1,6 @@
-# Copyright (C) 2006 Tanaka Akira  <akr@fsij.org>
+# chkbuild/main.rb - chkbuild main routines.
+#
+# Copyright (C) 2006-2011 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -26,7 +28,7 @@ require 'pathname'
 require 'optparse'
 
 module ChkBuild
-  TOP_DIRECTORY = Pathname.getwd
+  TOP_DIRECTORY = Pathname.new(__FILE__).realpath.dirname.dirname
   def ChkBuild.build_top() TOP_DIRECTORY+"tmp/build" end
   def ChkBuild.public_top() TOP_DIRECTORY+"tmp/public_html" end
 
@@ -40,8 +42,10 @@ module ChkBuild
     end
     print <<"End"
 usage:
-  #{command} [build [--procmemsize]]
+  #{command} help
+  #{command} [build [--procmemsize] [depsuffixed_name...]]
   #{command} list
+  #{command} options [depsuffixed_name...]
   #{command} title [depsuffixed_name...]
   #{command} logdiff [depsuffixed_name [date1 [date2]]]
 End
@@ -49,12 +53,21 @@ End
   end
 
   @target_list = []
+
+  def ChkBuild.each_target_build(last_target=@target_list.last)
+    build_set = last_target.make_build_set
+    build_set.each {|t, builds|
+      builds.each {|build|
+        yield t, build
+      }
+    }
+  end
+
   def ChkBuild.main_build
     o = OptionParser.new
+    use_procmemsize = false
     o.def_option('--procmemsize') {
-      @target_list.each {|t|
-        t.update_option(:procmemsize => true)
-      }
+      use_procmemsize = true
     }
     o.parse!
     begin
@@ -66,9 +79,32 @@ End
     STDOUT.sync = true
     ChkBuild.build_top.mkpath
     ChkBuild.lock_start
-    @target_list.each {|t|
-      t.make_result
+    each_target_build {|t, build|
+      next if !(ARGV.empty? || ARGV.include?(build.depsuffixed_name))
+      build.update_option(:procmemsize => true) if use_procmemsize
+      if build.depbuilds.all? {|depbuild| depbuild.success? }
+	build.build
+      end
     }
+  end
+
+  def ChkBuild.main_internal_build
+    depsuffixed_name = ARGV.shift
+    start_time = ARGV.shift
+    target_params_name = ARGV.shift
+    target_output_name = ARGV.shift
+    begin
+      Process.setpriority(Process::PRIO_PROCESS, 0, 10)
+    rescue Errno::EACCES # already niced to 11 or more
+    end
+    File.umask(002)
+    STDIN.reopen("/dev/null", "r")
+    STDOUT.sync = true
+    ChkBuild.build_top.mkpath
+    build, builthash = File.open(target_params_name) {|f| Marshal.load(f) }
+    ChkBuild::Build::BuiltHash.update builthash
+    build.internal_build start_time, target_output_name
+    exit 1
   end
 
   def ChkBuild.def_target(target_name, *args, &block)
@@ -78,46 +114,61 @@ End
   end
 
   def ChkBuild.main_list
-    @target_list.each {|t|
-      t.each_build_obj {|build|
-        puts build.depsuffixed_name
+    each_target_build {|t, build|
+      puts build.depsuffixed_name
+    }
+  end
+
+  def ChkBuild.main_options
+    each_target_build {|t, build|
+      next if !ARGV.empty? && !ARGV.include?(build.depsuffixed_name)
+      puts build.depsuffixed_name
+      opts = build.opts
+      if opts[:complete_options] && opts[:complete_options].respond_to?(:merge_dependencies)
+	dep_dirs = []
+	build.depbuilds.each {|depbuild|
+	  dir = ChkBuild.build_top + depbuild.depsuffixed_name + "<time>"
+	  dep_dirs << "#{depbuild.target.target_name}=#{dir}"
+	}
+	opts = opts[:complete_options].merge_dependencies(opts, dep_dirs)
+      end
+      opts.keys.sort_by {|k| k.to_s }.each {|k|
+	v = opts[k]
+	puts "option #{k.inspect} => #{v.inspect}"
       }
+      puts
     }
   end
 
   def ChkBuild.main_title
-    @target_list.each {|t|
-      t.each_build_obj {|build|
-        next if !ARGV.empty? && !ARGV.include?(build.depsuffixed_name)
-        last_txt = ChkBuild.public_top + build.depsuffixed_name + 'last.txt'
-        if last_txt.exist?
-          logfile = ChkBuild::LogFile.read_open(last_txt)
-          title = ChkBuild::Title.new(t, logfile)
-          title.run_hooks
-          puts "#{build.depsuffixed_name}:\t#{title.make_title}"
-        end
-      }
+    each_target_build {|t, build|
+      next if !ARGV.empty? && !ARGV.include?(build.depsuffixed_name)
+      last_txt = ChkBuild.public_top + build.depsuffixed_name + 'last.txt'
+      if last_txt.exist?
+	logfile = ChkBuild::LogFile.read_open(last_txt)
+	title = ChkBuild::Title.new(t, logfile)
+	title.run_hooks
+	puts "#{build.depsuffixed_name}:\t#{title.make_title}"
+      end
     }
   end
 
   def ChkBuild.main_logdiff
     depsuffixed_name, arg_t1, arg_t2 = ARGV
-    @target_list.each {|t|
-      t.each_build_obj {|build|
-        next if depsuffixed_name && build.depsuffixed_name != depsuffixed_name
-        ts = build.log_time_sequence
-        raise "no log: #{build.depsuffixed_name}/#{arg_t1}" if arg_t1 and !ts.include?(arg_t1)
-        raise "no log: #{build.depsuffixed_name}/#{arg_t2}" if arg_t2 and !ts.include?(arg_t2)
-        if ts.length < 2
-          puts "#{build.depsuffixed_name}: less than 2 logs"
-          next
-        end
-        t1 = arg_t1 || ts[-2]
-        t2 = arg_t2 || ts[-1]
-        puts "#{build.depsuffixed_name}: #{t1}->#{t2}"
-        build.output_diff(t1, t2, STDOUT)
-        puts
-      }
+    each_target_build {|t, build|
+      next if depsuffixed_name && build.depsuffixed_name != depsuffixed_name
+      ts = build.log_time_sequence
+      raise "no log: #{build.depsuffixed_name}/#{arg_t1}" if arg_t1 and !ts.include?(arg_t1)
+      raise "no log: #{build.depsuffixed_name}/#{arg_t2}" if arg_t2 and !ts.include?(arg_t2)
+      if ts.length < 2
+	puts "#{build.depsuffixed_name}: less than 2 logs"
+	next
+      end
+      t1 = arg_t1 || ts[-2]
+      t2 = arg_t2 || ts[-1]
+      puts "#{build.depsuffixed_name}: #{t1}->#{t2}"
+      build.output_diff(t1, t2, STDOUT)
+      puts
     }
   end
 
@@ -127,7 +178,9 @@ End
     case subcommand
     when 'help', '-h' then ChkBuild.main_help
     when 'build' then ChkBuild.main_build
+    when 'internal-build' then ChkBuild.main_internal_build
     when 'list' then ChkBuild.main_list
+    when 'options' then ChkBuild.main_options
     when 'title' then ChkBuild.main_title
     when 'logdiff' then ChkBuild.main_logdiff
     else

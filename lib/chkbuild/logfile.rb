@@ -1,4 +1,6 @@
-# Copyright (C) 2006,2009 Tanaka Akira  <akr@fsij.org>
+# chkbuild/logfile.rb - chkbuild's log file library
+#
+# Copyright (C) 2006-2010 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -30,13 +32,42 @@ end
 class ChkBuild::LogFile
   InitialMark = '=='
 
+  def self.os_version
+    if File.readable?("/etc/debian_version")
+      ver = File.read("/etc/debian_version").chomp
+      case ver
+      when /\A2\.0/; codename = 'potato'
+      when /\A3\.0/; codename = 'woody'
+      when /\A3\.1/; codename = 'sarge'
+      when /\A4\.0/; codename = 'etch'
+      when /\A5\.0/; codename = 'lenny'
+      else codename = nil
+      end
+      ver = "Debian GNU/Linux #{ver}"
+      ver << " (#{codename})" if codename
+      return ver
+    end
+    nil
+  end
+
+  def self.show_os_version
+    puts "Nickname: #{ChkBuild.nickname}"
+    system("uname -mrsv")
+    system("sw_vers") # MacOS X
+    if !system("lsb_release -idrc") # recent GNU/Linux
+      os_ver = self.os_version
+      puts os_ver if os_ver
+    end
+  end
+
   def self.write_open(filename, build)
     logfile = self.new(filename, true)
     logfile.start_section build.depsuffixed_name
     logfile.with_default_output {
-      system("uname -a")
+      self.show_os_version
       section_started = false
       build.traverse_depbuild {|depbuild|
+        next if build == depbuild
         if !section_started
           logfile.start_section 'dependencies'
           section_started = true
@@ -55,9 +86,9 @@ class ChkBuild::LogFile
     return [] unless log = self.get_section('dependencies')
     r = []
     log.each_line {|line|
-      if /^(\S+) (\d+T\d+) \((.*)\)$/ =~ line
+      if /^(\S+) (\d+T\d+Z?) \((.*)\)$/ =~ line
         r << [$1, $2, $3]
-      elsif /^(\S+) (\d+T\d+)$/ =~ line
+      elsif /^(\S+) (\d+T\d+Z?)$/ =~ line
         r << [$1, $2, $1]
       end
     }
@@ -75,6 +106,24 @@ class ChkBuild::LogFile
   def suffixed_name() depsuffixed_name.sub(/_.*/, '') end
   def target_name() suffixed_name.sub(/-.*/, '') end
   def suffixes() suffixed_name.split(/-/)[1..-1] end
+
+  def self.failed_line?(line)
+    if /\Afailed\(.*\)\z/ =~ line.chomp
+      true
+    else
+      false
+    end
+  end
+
+  def failed_section?(secname)
+    if log = get_section(secname)
+      lastline = log.chomp("").lastline
+      if ChkBuild::LogFile.failed_line?(lastline)
+        return true
+      end
+    end
+    false
+  end
 
   def self.read_open(filename)
     self.new(filename, false)

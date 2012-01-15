@@ -1,4 +1,6 @@
-# Copyright (C) 2005,2006,2007,2008 Tanaka Akira  <akr@fsij.org>
+# udiff.rb - unified diff library
+#
+# Copyright (C) 2005,2006,2007,2008,2009,2010 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -26,7 +28,8 @@ require 'escape'
 require 'tempfile'
 
 class UDiff
-  def UDiff.diff(path1, path2, out, header="--- #{path1}\n+++ #{path2}\n")
+  def UDiff.diff(path1, path2, out, header1="--- #{path1}\n", header2="+++ #{path2}\n")
+    header = header1 + header2
     UDiff.new(path1, path2, out, header).diff
   end
 

@@ -1,4 +1,6 @@
-# Copyright (C) 2006,2009 Tanaka Akira  <akr@fsij.org>
+# chkbuild/title.rb - title class implementation
+#
+# Copyright (C) 2006-2010 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -31,15 +33,18 @@ class ChkBuild::Title
     @title = {}
     @title[:version] = @logfile.suffixed_name
     @title[:dep_versions] = []
-    @title[:hostname] = "(#{Util.simple_hostname})"
+    @title[:hostname] = "(#{ChkBuild.nickname})"
     @title_order = [:version, :dep_versions, :hostname, :warn, :mark, :status]
     @logfile.each_secname {|secname|
-      log = @logfile.get_section(secname)
-      lastline = log.chomp("").lastline
-      if /\Afailed\(.*\)\z/ =~ lastline
-        sym = "failure_#{secname}".intern
-        @title_order << sym
-        @title[sym] = lastline
+      if @logfile.failed_section?(secname)
+	log = @logfile.get_section(secname)
+	lastline = log.chomp("").lastline
+	sym = "failure_#{secname}".intern
+	if %r{/} =~ secname && lastline == "failed(#{secname})"
+	  lastline = "failed(#{secname.sub(%r{/.*\z}, '/')})"
+	end
+	@title_order << sym
+	@title[sym] = lastline
       end
     }
   end
@@ -60,7 +65,7 @@ class ChkBuild::Title
   end
 
   def run_title_hooks
-    @target.each_title_hook {|secname, block|
+    ChkBuild.fetch_title_hook(@target.target_name).each {|secname, block|
       if secname == nil
         block.call self, @logfile.get_all_log
       elsif log = @logfile.get_section(secname)
@@ -70,15 +75,13 @@ class ChkBuild::Title
   end
 
   def run_failure_hooks
-    @target.each_failure_hook {|secname, block|
-      if log = @logfile.get_section(secname)
-        lastline = log.chomp("").lastline
-        if /\Afailed\(.*\)\z/ =~ lastline
-          sym = "failure_#{secname}".intern
-          if newval = block.call(log)
-            @title[sym] = newval
-          end
-        end
+    ChkBuild.fetch_failure_hook(@target.target_name).each {|secname, block|
+      if @logfile.failed_section?(secname)
+        log = @logfile.get_section(secname)
+	sym = "failure_#{secname}".intern
+	if newval = block.call(log)
+	  @title[sym] = newval
+	end
       end
     }
   end
@@ -96,9 +99,29 @@ class ChkBuild::Title
 
   def make_title
     title_hash = @title
-    @title_order.map {|key|
+    a = []
+    a = @title_order.map {|key|
       title_hash[key]
-    }.flatten.join(' ').gsub(/\s+/, ' ').strip
+    }.flatten
+    h = Hash.new(0)
+    a.each {|s|
+      h[s] += 1
+    }
+    a2 = []
+    a.each {|s|
+      if h[s] == 1
+        a2 << s
+      elsif h[s] > 1
+	n = h[s]
+        if /\A[0-9]/ =~ s
+	  a2 << "#{n}_#{s}"
+	else
+	  a2 << "#{n}#{s}"
+	end
+	h[s] = 0
+      end
+    }
+    a2.join(' ').gsub(/\s+/, ' ').strip
   end
 
   def [](key)

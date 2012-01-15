@@ -1,3 +1,5 @@
+# gdb.rb - gdb invocation library
+#
 # Copyright (C) 2005,2006,2009 Tanaka Akira  <akr@fsij.org>
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -34,7 +36,7 @@ module GDB
     binaries = {}
     core_info = []
     Find.find(dir.to_s) {|f|
-      stat = File.stat(f)
+      stat = File.lstat(f)
       basename = File.basename(f)
       binaries[basename] = f if stat.file? && stat.executable?
       next if /\bcore\b/ !~ basename
