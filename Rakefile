@@ -9,7 +9,9 @@ begin
     gem.summary = %Q{gemified version of akr's chkbuild - a robust continuous building system}
     gem.email = "yugui@yugui.jp"
     gem.homepage = "http://github.com/yugui/chkbuild"
-    gem.authors = ["TANAKA, Akira", "Yuki Sonoda (Yugui)"]
+    gem.authors = ["TANAKA, Akira", "Yuki Yugui Sonoda"]
+    gem.files = %w[ bin core_ext lib setup sample test].inject([]){|set, dir| set + Dir["#{dir}/**/*"]} +
+      %w[ README.ja.rd Rakefile VERSION lchg.rb erbio.rb ]
     # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
   end
 
